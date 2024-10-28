@@ -20,9 +20,9 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	 * starting up, or the user navigating between pages / folders etc.. There is also an inverse of this event in the form of {@link streamDeck.client.onWillDisappear}.
 	 */
 	override async onWillAppear(ev: WillAppearEvent<LocalWeatherSettings>): Promise<void> {
-		streamDeck.logger.info('----------DEBUGGING willappear');
+		streamDeck.logger.info('----------ONWILLAPPEAR');
 		const settings = await fetchWeather(ev);
-		return ev.action.setTitle(roundTemp(settings.temperature));
+		return ev.action.setTitle(generateTitle(settings.temperature, settings.humidity, settings.windspeed));
 	}
 
 	/**
@@ -31,9 +31,10 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	 * and action information where applicable.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<LocalWeatherSettings>): Promise<void> {
-		streamDeck.logger.info('----------DEBUGGING onkeydown');
+		streamDeck.logger.info('----------ONKEYDOWN');
 		const settings = await fetchWeather(ev);
-		return ev.action.setTitle(roundTemp(settings.temperature));
+		ev.action.setImage('imgs/actions/01n@2x')
+		return ev.action.setTitle(generateTitle(settings.temperature, settings.humidity, settings.windspeed));
 	}
 }
 
@@ -46,16 +47,17 @@ async function fetchWeather(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownE
 	return {
 		temperature: weather.temperature,
 		humidity: weather.humidity,
+		windspeed: weather.windspeed,
 		description: weather.description,
 		icon: weather.icon
 	} as DisplayWeatherSettings;
 }
 
-function roundTemp(temp: number|undefined) {
-	streamDeck.logger.info('----------DEBUGGING roundTemp');
-	streamDeck.logger.info(temp);
-	const rounded = Math.round((temp || 0) * 10) / 10
-	return `${rounded}°`
+function generateTitle(temp: number, humidity: number, windspeed: number) {
+	const roundedTemp = Math.round((temp || 0) * 10) / 10
+	const roundedWind = Math.round((windspeed || 0) * 10) / 10
+	// return `${roundedTemp}°\n${humidity}%\n${roundedWind}mph`
+	return `${humidity}%\n${roundedWind}mph`
 }
 
 async function openweatherData(apiKey: string, lat: string, lon: string) {
@@ -70,7 +72,7 @@ async function openweatherData(apiKey: string, lat: string, lon: string) {
 			}
         };
 
-		streamDeck.logger.info('DEBUGGING');
+		streamDeck.logger.info('----------REQUEST');
 		streamDeck.logger.info(options);
 
         const req = https.request(options, (res) => {
@@ -81,20 +83,20 @@ async function openweatherData(apiKey: string, lat: string, lon: string) {
             });
 
             res.on('end', () => {
-				streamDeck.logger.info('DEBUGGING');
-				streamDeck.logger.info(data);
                 try {
                     const jsonData = JSON.parse(data);
 
-					streamDeck.logger.info('DEBUGGING');
+					streamDeck.logger.info('----------RESPONSE');
 					streamDeck.logger.info(jsonData);
 
                     // Extract relevant weather information
                     const temperature = jsonData.main.temp;
+                    const humidity = jsonData.main.humidity;
+                    const windspeed = jsonData.wind.speed;
                     const description = jsonData.weather[0].description;
                     const icon = jsonData.weather[0].icon;
 
-                    resolve({ temperature, description, icon } as WeatherData);
+                    resolve({ temperature, humidity, windspeed, description, icon } as WeatherData);
                 } catch (error) {
                     reject(error);
                 }
@@ -121,14 +123,17 @@ type LocalWeatherSettings = {
 
 type DisplayWeatherSettings = {
 	// data fetched from API
-	temperature?: number;
-	description?: string;
-	icon?: string;
+	temperature: number;
+	humidity: number;
+	windspeed: number;
+	description: string;
+	icon: string;
 };
 
 type WeatherData = {
     temperature: number;
 	humidity: number;
+	windspeed: number;
     description: string;
     icon: string
 }
@@ -142,4 +147,8 @@ type OpenWeatherResponse = {
         temp: number;
 		humidity: number;
     };
+	wind: {
+		speed: number;
+	};
+	name: string;
 };

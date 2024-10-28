@@ -1,44 +1,140 @@
-import { action, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
+import { action, streamDeck, DidReceiveSettingsEvent, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
+import fetch from 'node-fetch';
+import * as https from 'https';
+
+async function getWeather(apiKey: string, lat: string, lon: string) {
+    return new Promise<WeatherData>((resolve, reject) => {
+        const options = {
+            hostname: 'api.openweathermap.org',
+            port: 443,
+            path: `/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=imperial`,
+            method: 'GET',
+			headers: {
+				'Content-Type': 'application/json',
+			}
+        };
+
+		streamDeck.logger.info('DEBUGGING');
+		streamDeck.logger.info(options);
+
+        const req = https.request(options, (res) => {
+            let data = '';
+
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+
+            res.on('end', () => {
+				streamDeck.logger.info('DEBUGGING');
+				streamDeck.logger.info(data);
+                try {
+                    const jsonData = JSON.parse(data);
+
+					streamDeck.logger.info('DEBUGGING');
+					streamDeck.logger.info(jsonData);
+
+                    // Extract relevant weather information
+                    const temperature = jsonData.main.temp;
+                    const description = jsonData.weather[0].description;
+                    const icon = jsonData.weather[0].icon;
+
+                    resolve({ temperature, description, icon } as WeatherData);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        });
+
+        req.on('error', (error) => {
+            reject(error);
+        });
+
+        req.end();
+    });
+}
 
 /**
- * An example action class that displays a count that increments by one each time the button is pressed.
+ * Set weather information to the action settings.
  */
-@action({ UUID: "com.luke-abel.local-weather.increment" })
-export class LocalWeather extends SingletonAction<LocalWeatherSettings> {
+async function updateWeather(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent) {
+	const global: LocalWeatherSettings = await streamDeck.settings.getGlobalSettings();
+	streamDeck.logger.info('----------DEBUGGING global');
+	streamDeck.logger.info(global);
+	streamDeck.logger.info('----------DEBUGGING settings');
+	streamDeck.logger.info(ev.payload.settings);
+	const settings = ev.payload.settings as LocalWeatherSettings;
+	const weather: WeatherData = await getWeather(settings.openweatherApiKey, settings.latitude, settings.longitude);
+	return {
+		temperature: weather.temperature,
+		description: weather.description,
+		icon: weather.icon
+	} as DisplayWeatherSettings;
+}
+
+/**
+ * An action class that displays the current temperature when the current button is pressed.
+ */
+@action({ UUID: "com.luke-abel.local-weather.display-weather" })
+export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
+
+	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<LocalWeatherSettings>): void {
+		// Handle the settings changing in the property inspector (UI).
+		streamDeck.logger.info('----------DEBUGGING didreceive');
+		streamDeck.logger.info(ev);
+		updateWeather(ev);
+	}
+
 	/**
 	 * The {@link SingletonAction.onWillAppear} event is useful for setting the visual representation of an action when it becomes visible. This could be due to the Stream Deck first
-	 * starting up, or the user navigating between pages / folders etc.. There is also an inverse of this event in the form of {@link streamDeck.client.onWillDisappear}. In this example,
-	 * we're setting the title to the "count" that is incremented in {@link IncrementCounter.onKeyDown}.
+	 * starting up, or the user navigating between pages / folders etc.. There is also an inverse of this event in the form of {@link streamDeck.client.onWillDisappear}.
 	 */
-	override onWillAppear(ev: WillAppearEvent<LocalWeatherSettings>): void | Promise<void> {
-		return ev.action.setTitle(`${ev.payload.settings.count ?? 0}`);
+	override async onWillAppear(ev: WillAppearEvent<LocalWeatherSettings>): Promise<void> {
+		streamDeck.logger.info('----------DEBUGGING willappear');
+		const settings = await updateWeather(ev);
+		return ev.action.setTitle(`${settings.temperature}`);
 	}
 
 	/**
 	 * Listens for the {@link SingletonAction.onKeyDown} event which is emitted by Stream Deck when an action is pressed. Stream Deck provides various events for tracking interaction
 	 * with devices including key down/up, dial rotations, and device connectivity, etc. When triggered, {@link ev} object contains information about the event including any payloads
-	 * and action information where applicable. In this example, our action will display a counter that increments by one each press. We track the current count on the action's persisted
-	 * settings using `setSettings` and `getSettings`.
+	 * and action information where applicable.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<LocalWeatherSettings>): Promise<void> {
-		// Update the count from the settings.
-		const { settings } = ev.payload;
-		settings.incrementBy ??= 1;
-		settings.count = (settings.count ?? 0) + settings.incrementBy;
-
-		// Update the current count in the action's settings, and change the title.
-		await ev.action.setSettings(settings);
-		await ev.action.setTitle(`${settings.count}`);
+		streamDeck.logger.info('----------DEBUGGING onkeydown');
+		const settings = await updateWeather(ev);
+		return ev.action.setTitle(`${settings.temperature}`);
 	}
 }
 
 /**
- * Settings for {@link IncrementCounter}.
+ * Settings for {@link DisplayWeather}.
  */
 type LocalWeatherSettings = {
-	count?: number;
-	incrementBy?: number;
+	// user-provided settings
 	openweatherApiKey: string;
 	latitude: string;
 	longitude: string;
+};
+
+type DisplayWeatherSettings = {
+	// data fetched from API
+	temperature?: number;
+	description?: string;
+	icon?: string;
+};
+
+type WeatherData = {
+    temperature: number;
+    description: string;
+    icon: string
+}
+
+type OpenWeatherResponse = {
+	weather: {
+        description: string;
+        icon: string;
+    }[];
+    main: {
+        temp: number;
+    };
 };

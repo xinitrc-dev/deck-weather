@@ -1,5 +1,4 @@
 import { action, streamDeck, DidReceiveSettingsEvent, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
-import fetch from 'node-fetch';
 import * as https from 'https';
 
 /**

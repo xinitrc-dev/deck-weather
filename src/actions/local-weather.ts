@@ -1,17 +1,21 @@
 import { action, streamDeck, DidReceiveSettingsEvent, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
 import * as https from 'https';
 
+const VALID_ICONS = [
+	'01d', '01n', '02d', '02n', '03d', '03n',
+	'04d', '04n', '09d', '09n', '10d', '10n',
+	'11d', '11n', '13d', '13n', '50d', '50n',
+];
+
 /**
  * An action class that displays the current temperature when the current button is pressed.
  */
 @action({ UUID: "com.luke-abel.local-weather.display-weather" })
 export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 
-	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<LocalWeatherSettings>): void {
-		// Handle the settings changing in the property inspector (UI).
-		// streamDeck.logger.info('----------DEBUGGING didreceive');
-		// streamDeck.logger.info(ev);
-		// fetchWeather(ev);
+	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<LocalWeatherSettings>): Promise<void> {
+		streamDeck.logger.info('----------DIDRECEIVE');
+		return setKeyInfo(ev);
 	}
 
 	/**
@@ -20,9 +24,7 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	 */
 	override async onWillAppear(ev: WillAppearEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONWILLAPPEAR');
-		const settings = await fetchWeather(ev);
-		ev.action.setImage('imgs/actions/display-weather/01d')
-		return ev.action.setTitle(generateTitle(settings.temperature, settings.humidity, settings.windspeed));
+		return setKeyInfo(ev);
 	}
 
 	/**
@@ -32,18 +34,25 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	 */
 	override async onKeyDown(ev: KeyDownEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONKEYDOWN');
-		const settings = await fetchWeather(ev);
-		ev.action.setImage('imgs/actions/display-weather/01d')
-		return ev.action.setTitle(generateTitle(settings.temperature, settings.humidity, settings.windspeed));
+		return setKeyInfo(ev);
 	}
 }
 
+async function setKeyInfo(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent): Promise<void> {
+	const { temperature, humidity, windspeed, icon } = await fetchWeather();
+	if (VALID_ICONS.includes(icon)) {
+		// TODO: add unknown icon
+		ev.action.setImage(`imgs/actions/display-weather/${icon}`);
+	}
+	return ev.action.setTitle(generateTitle(temperature, humidity, windspeed));
+}
+
 /**
- * Set weather information to the action settings.
+ * Gather weather information from API fetch.
  */
-async function fetchWeather(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent) {
-	const settings = ev.payload.settings as LocalWeatherSettings;
-	const weather: WeatherData = await openweatherData(settings.openweatherApiKey, settings.latitude, settings.longitude);
+async function fetchWeather() {
+	const { openweatherApiKey, latitude, longitude } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+	const weather: WeatherData = await openweatherData(openweatherApiKey, latitude, longitude);
 	return {
 		temperature: weather.temperature,
 		humidity: weather.humidity,
@@ -56,8 +65,7 @@ async function fetchWeather(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownE
 function generateTitle(temp: number, humidity: number, windspeed: number) {
 	const roundedTemp = Math.round((temp || 0) * 10) / 10
 	const roundedWind = Math.round((windspeed || 0) * 10) / 10
-	// return `${roundedTemp}°\n${humidity}%\n${roundedWind}mph`
-	return `${humidity}%\n${roundedWind}mph`
+	return `${roundedTemp}°, ${humidity}%\n\n\n${roundedWind} mph`
 }
 
 async function openweatherData(apiKey: string, lat: string, lon: string) {

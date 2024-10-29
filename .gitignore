@@ -1,6 +1,8 @@
 # Node.js
 node_modules/
 
+.DS_Store
+
 # Stream Deck files
 *.sdPlugin/bin
 *.sdPlugin/logs

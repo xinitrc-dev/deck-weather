@@ -21,6 +21,7 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	override async onWillAppear(ev: WillAppearEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONWILLAPPEAR');
 		const settings = await fetchWeather(ev);
+		ev.action.setImage('imgs/actions/display-weather/01d')
 		return ev.action.setTitle(generateTitle(settings.temperature, settings.humidity, settings.windspeed));
 	}
 
@@ -32,7 +33,7 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	override async onKeyDown(ev: KeyDownEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONKEYDOWN');
 		const settings = await fetchWeather(ev);
-		ev.action.setImage('imgs/actions/01n@2x')
+		ev.action.setImage('imgs/actions/display-weather/01d')
 		return ev.action.setTitle(generateTitle(settings.temperature, settings.humidity, settings.windspeed));
 	}
 }

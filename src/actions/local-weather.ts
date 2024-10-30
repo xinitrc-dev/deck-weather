@@ -51,8 +51,8 @@ async function setKeyInfo(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEve
  * Gather weather information from API fetch.
  */
 async function fetchWeather() {
-	const { openweatherApiKey, latitude, longitude } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
-	const weather: WeatherData = await openweatherData(openweatherApiKey, latitude, longitude);
+	const { openweatherApiKey, latLong } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+	const weather: WeatherData = await openweatherData(openweatherApiKey, latLong);
 	return {
 		temperature: weather.temperature,
 		humidity: weather.humidity,
@@ -62,18 +62,19 @@ async function fetchWeather() {
 	} as DisplayWeatherSettings;
 }
 
-function generateTitle(temp: number, humidity: number, windspeed: number) {
+function generateTitle(temp: number, humidity: number, windspeed: number): string {
 	const roundedTemp = Math.round((temp || 0) * 10) / 10
 	const roundedWind = Math.round((windspeed || 0) * 10) / 10
-	return `${roundedTemp}°, ${humidity}%\n\n\n${roundedWind} mph`
+	return `${roundedTemp}°, ${humidity}%\n\n\n\n${roundedWind} mph`
 }
 
-async function openweatherData(apiKey: string, lat: string, lon: string) {
+async function openweatherData(apiKey: string, latLong: string) {
+	const { latitude, longitude } = splitLatLong(latLong)
     return new Promise<WeatherData>((resolve, reject) => {
         const options = {
             hostname: 'api.openweathermap.org',
             port: 443,
-            path: `/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=imperial`,
+            path: `/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${apiKey}&units=imperial`,
             method: 'GET',
 			headers: {
 				'Content-Type': 'application/json',
@@ -119,14 +120,25 @@ async function openweatherData(apiKey: string, lat: string, lon: string) {
     });
 }
 
+function splitLatLong(latLong: string) {
+	const parts = latLong.split(",");
+
+	// Extract latitude and longitude, removing any extra spaces
+	const latitude = parts[0].trim();
+	const longitude = parts[1].trim();
+  
+	// Return the latitude and longitude as separate strings
+	return { latitude, longitude } as { latitude: string, longitude: string};
+}
+
 /**
  * Settings for {@link DisplayWeather}.
  */
 type LocalWeatherSettings = {
 	// user-provided settings
 	openweatherApiKey: string;
-	latitude: string;
-	longitude: string;
+	latLong: string;
+	interval: string;
 };
 
 type DisplayWeatherSettings = {

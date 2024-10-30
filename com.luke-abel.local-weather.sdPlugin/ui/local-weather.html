@@ -11,6 +11,9 @@
     <!--
         Learn more about property inspector components at https://sdpi-components.dev/docs/components
     -->
+    <sdpi-item>
+        Do not set a title, the plugin will replace it!
+    </sdpi-item>
     <sdpi-item label="OpenWeather API Key">
         <sdpi-textfield
             setting="openweatherApiKey"
@@ -19,20 +22,19 @@
             required>
         </sdpi-textfield>
     </sdpi-item>
-    <sdpi-item label="Latitude">
+    <sdpi-item label="Coordinates">
         <sdpi-textfield
-            setting="latitude"
+            setting="latLong"
             global="true"
-            placeholder="12.345"
+            placeholder="12.345, -12.345"
             required>
         </sdpi-textfield>
     </sdpi-item>
-    <sdpi-item label="Longitude">
+    <sdpi-item label="Update Interval">
         <sdpi-textfield
-            setting="longitude"
+            setting="interval"
             global="true"
-            placeholder="12.345"
-            required>
+            placeholder="Value between 0 and 60">
         </sdpi-textfield>
     </sdpi-item>
 </body>

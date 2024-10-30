@@ -1,6 +1,7 @@
 import { action, streamDeck, DidReceiveSettingsEvent, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
 import * as https from 'https';
 
+// These icons are part of the current OpenWeather API specification.
 const VALID_ICONS = [
 	'01d', '01n', '02d', '02n', '03d', '03n',
 	'04d', '04n', '09d', '09n', '10d', '10n',
@@ -8,7 +9,7 @@ const VALID_ICONS = [
 ];
 
 /**
- * An action class that displays the current temperature when the current button is pressed.
+ * An action class that displays current weather information when the current button is pressed.
  */
 @action({ UUID: "com.luke-abel.local-weather.display-weather" })
 export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
@@ -19,36 +20,59 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	}
 
 	/**
-	 * The {@link SingletonAction.onWillAppear} event is useful for setting the visual representation of an action when it becomes visible. This could be due to the Stream Deck first
-	 * starting up, or the user navigating between pages / folders etc.. There is also an inverse of this event in the form of {@link streamDeck.client.onWillDisappear}.
+	 * The {@link SingletonAction.onWillAppear} event is useful for setting the
+	 * visual representation of an action when it becomes visible.
+	 * This could be due to the Stream Deck first starting up, or the user navigating between pages / folders etc.
 	 */
 	override async onWillAppear(ev: WillAppearEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONWILLAPPEAR');
-		return setKeyInfo(ev);
+		return beginInterval(ev);
 	}
 
 	/**
-	 * Listens for the {@link SingletonAction.onKeyDown} event which is emitted by Stream Deck when an action is pressed. Stream Deck provides various events for tracking interaction
-	 * with devices including key down/up, dial rotations, and device connectivity, etc. When triggered, {@link ev} object contains information about the event including any payloads
-	 * and action information where applicable.
+	 * Listens for the {@link SingletonAction.onKeyDown} event,
+	 * which is emitted by Stream Deck when an action is pressed.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONKEYDOWN');
-		return setKeyInfo(ev);
+		return beginInterval(ev);
 	}
 }
 
+/**
+ * If configured, wraps setKeyInfo in an interval. Otherwise, simply passes-through to setKeyInfo.
+ */
 async function beginInterval(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent) {
 	const { interval } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
-	if (!!interval) {
+	const { intervalId } = await ev.action.getSettings() as WeatherActionSettings;	
+	const ms = await getIntervalMs(ev);
+
+	if (ms > 0 && !intervalId) {
 		streamDeck.logger.info('----------USEINTERVAL');
-		const ms = parseInt(interval, 10) * 1000;
-		streamDeck.logger.info(`----------${ms}ms`);
-		setInterval(setKeyInfo, ms, ev);
+		const intervalId = setInterval(setKeyInfo, ms, ev);
 	}
 	return setKeyInfo(ev)
 }
 
+/**
+ * Retrieve the user's provided interval setting, parsing the value,
+ * clamping it between 0 and 60, and converting to milliseconds.
+ */
+async function getIntervalMs(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent): Promise<number> {
+	const { interval } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+	const sec = parseInt(interval, 10);
+	streamDeck.logger.info(`----------INTERVAL ${sec}`);
+
+	if (sec > 0) {
+		return Math.min(Math.max(sec, 0), 60) * 60 * 1000;
+	}
+
+	return 0;
+}
+
+/**
+ * Set the image and title of the key based on current weather information.
+ */
 async function setKeyInfo(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent): Promise<void> {
 	const { temperature, humidity, windspeed, icon } = await fetchWeather();
 	if (VALID_ICONS.includes(icon)) {
@@ -61,24 +85,23 @@ async function setKeyInfo(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEve
 /**
  * Gather weather information from API fetch.
  */
-async function fetchWeather() {
+async function fetchWeather(): Promise<WeatherData> {
 	const { openweatherApiKey, latLong } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
-	const weather: WeatherData = await openweatherData(openweatherApiKey, latLong);
-	return {
-		temperature: weather.temperature,
-		humidity: weather.humidity,
-		windspeed: weather.windspeed,
-		description: weather.description,
-		icon: weather.icon
-	} as DisplayWeatherSettings;
+	return await openweatherData(openweatherApiKey, latLong);
 }
 
+/**
+ * Generate formatted title containing weather information.
+ */
 function generateTitle(temp: number, humidity: number, windspeed: number): string {
 	const roundedTemp = Math.round((temp || 0) * 10) / 10
 	const roundedWind = Math.round((windspeed || 0) * 10) / 10
 	return `${roundedTemp}°, ${humidity}%\n\n\n\n${roundedWind} mph`
 }
 
+/**
+ * Request weather information from OpenWeather and format the response.
+ */
 async function openweatherData(apiKey: string, latLong: string) {
 	const { latitude, longitude } = splitLatLong(latLong)
     return new Promise<WeatherData>((resolve, reject) => {
@@ -131,36 +154,48 @@ async function openweatherData(apiKey: string, latLong: string) {
     });
 }
 
+/**
+ * Convert user-provided latitude and longitude into values that can be used with the OpenWeather API.
+ */
 function splitLatLong(latLong: string) {
 	const parts = latLong.split(",");
 
+	const processCoordinate = (coord: string) => {
+		// Remove excess whitespace
+        coord = coord.trim();
+		// Remove W/S and add negative sign
+        if (coord.endsWith("W") || coord.endsWith("S")) {
+            coord = "-" + coord.slice(0, -1);
+        }
+		// Remove degree symbol
+        coord = coord.replace("°", "");
+        return coord;
+    };
+
 	// Extract latitude and longitude, removing any extra spaces
-	const latitude = parts[0].trim();
-	const longitude = parts[1].trim();
+	const latitude = processCoordinate(parts[0]);
+	const longitude = processCoordinate(parts[1]);
   
 	// Return the latitude and longitude as separate strings
 	return { latitude, longitude } as { latitude: string, longitude: string};
 }
 
 /**
- * Settings for {@link DisplayWeather}.
+ * User-provided settings for {@link DisplayWeather}.
  */
 type LocalWeatherSettings = {
-	// user-provided settings
 	openweatherApiKey: string;
 	latLong: string;
 	interval: string;
 };
 
-type DisplayWeatherSettings = {
-	// data fetched from API
-	temperature: number;
-	humidity: number;
-	windspeed: number;
-	description: string;
-	icon: string;
-};
+type WeatherActionSettings = {
+	intervalId: number;
+}
 
+/**
+ * Data fetched from the OpenWeatherAPI.
+ */
 type WeatherData = {
     temperature: number;
 	humidity: number;
@@ -169,6 +204,9 @@ type WeatherData = {
     icon: string
 }
 
+/**
+ * Shape of the OpenWeather API response.
+ */
 type OpenWeatherResponse = {
 	weather: {
         description: string;

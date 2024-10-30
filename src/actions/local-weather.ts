@@ -16,7 +16,7 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------DIDRECEIVE');
-		return setKeyInfo(ev);
+		return beginInterval(ev, true);
 	}
 
 	/**
@@ -26,7 +26,7 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	 */
 	override async onWillAppear(ev: WillAppearEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONWILLAPPEAR');
-		return beginInterval(ev);
+		return beginInterval(ev, false);
 	}
 
 	/**
@@ -35,23 +35,30 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	 */
 	override async onKeyDown(ev: KeyDownEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONKEYDOWN');
-		return beginInterval(ev);
+		return beginInterval(ev, false);
 	}
 }
 
 /**
  * If configured, wraps setKeyInfo in an interval. Otherwise, simply passes-through to setKeyInfo.
  */
-async function beginInterval(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent) {
-	const { interval } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
-	const { intervalId } = await ev.action.getSettings() as WeatherActionSettings;	
+async function beginInterval(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent, refreshInterval: boolean) {
+	const { interval, intervalId } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
 	const ms = await getIntervalMs(ev);
 
-	if (ms > 0 && !intervalId) {
-		streamDeck.logger.info('----------USEINTERVAL');
-		const intervalId = setInterval(setKeyInfo, ms, ev);
+	if (refreshInterval) {
+		clearInterval(intervalId);
 	}
-	return setKeyInfo(ev)
+
+	if (ms > 0 && !intervalId) {
+		const clampedMs = Math.min(Math.max(ms, 36000000), 6000);
+		streamDeck.logger.info('----------USEINTERVAL');
+		const intervalId = setInterval(setKeyInfo, clampedMs, ev, true)[Symbol.toPrimitive]();		;
+		streamDeck.logger.info(`----------INTERVALID ${intervalId}`);
+		ev.action.setSettings({ intervalId })
+	}
+	streamDeck.logger.info('----------NOINTERVAL');
+	return setKeyInfo(ev, false)
 }
 
 /**
@@ -73,7 +80,12 @@ async function getIntervalMs(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDown
 /**
  * Set the image and title of the key based on current weather information.
  */
-async function setKeyInfo(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent): Promise<void> {
+async function setKeyInfo(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent, fromInterval: boolean): Promise<void> {
+	if (fromInterval) {
+		const { interval } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+		streamDeck.logger.info(`----------FROMINTERVAL ${interval}`);
+	}
+
 	const { temperature, humidity, windspeed, icon } = await fetchWeather();
 	if (VALID_ICONS.includes(icon)) {
 		// TODO: add unknown icon
@@ -187,11 +199,11 @@ type LocalWeatherSettings = {
 	openweatherApiKey: string;
 	latLong: string;
 	interval: string;
+	intervalId?: number;
 };
 
 type WeatherActionSettings = {
-	intervalId: number;
-}
+};
 
 /**
  * Data fetched from the OpenWeatherAPI.

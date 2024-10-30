@@ -38,6 +38,17 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	}
 }
 
+async function beginInterval(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent) {
+	const { interval } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+	if (!!interval) {
+		streamDeck.logger.info('----------USEINTERVAL');
+		const ms = parseInt(interval, 10) * 1000;
+		streamDeck.logger.info(`----------${ms}ms`);
+		setInterval(setKeyInfo, ms, ev);
+	}
+	return setKeyInfo(ev)
+}
+
 async function setKeyInfo(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent): Promise<void> {
 	const { temperature, humidity, windspeed, icon } = await fetchWeather();
 	if (VALID_ICONS.includes(icon)) {

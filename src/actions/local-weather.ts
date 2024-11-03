@@ -1,4 +1,5 @@
-import { action, streamDeck, DidReceiveSettingsEvent, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
+import { action, streamDeck, KeyDownEvent, SingletonAction, WillAppearEvent, SendToPluginEvent } from "@elgato/streamdeck";
+import { clear } from "console";
 import * as https from 'https';
 
 // These icons are part of the current OpenWeather API specification.
@@ -14,10 +15,10 @@ const VALID_ICONS = [
 @action({ UUID: "com.luke-abel.local-weather.display-weather" })
 export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 
-	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<LocalWeatherSettings>): Promise<void> {
-		streamDeck.logger.info('----------DIDRECEIVE');
-		return beginInterval(ev, true);
-	}
+	// override async onSendToPlugin(ev: SendToPluginEvent<LocalWeatherSettings, LocalWeatherSettings>): Promise<void> {
+	// 	streamDeck.logger.info('----------SENDTOPLUGIN');
+	// 	return beginInterval(ev, true);
+	// }
 
 	/**
 	 * The {@link SingletonAction.onWillAppear} event is useful for setting the
@@ -35,43 +36,52 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	 */
 	override async onKeyDown(ev: KeyDownEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONKEYDOWN');
-		return beginInterval(ev, false);
+		return beginInterval(ev, true);
 	}
 }
 
 /**
  * If configured, wraps setKeyInfo in an interval. Otherwise, simply passes-through to setKeyInfo.
  */
-async function beginInterval(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent, refreshInterval: boolean) {
-	const { interval, intervalId } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
-	const ms = await getIntervalMs(ev);
+async function beginInterval(ev: WillAppearEvent|KeyDownEvent, clearRefresh: boolean) {
+	const { refreshTime } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+	let { intervalId } = await ev.action.getSettings() as LocalWeatherSettings;	
+	const ms = await getRefreshTimeMs(ev);
 
-	if (refreshInterval) {
+	// Clear the auto-refresh, likely because the user has provided a new refreshTime.
+	if (intervalId && clearRefresh) {
+		streamDeck.logger.info(`----------CLEARINTERVAL ${intervalId}`);
 		clearInterval(intervalId);
+		intervalId = undefined;
 	}
 
+	// If refreshTime has been set and no interval has, start the interval with the refreshTime.
 	if (ms > 0 && !intervalId) {
-		const clampedMs = Math.min(Math.max(ms, 36000000), 6000);
 		streamDeck.logger.info('----------USEINTERVAL');
+		streamDeck.logger.info(`----------MS ${ms}`);
+		const clampedMs = clamp(ms, 300000, 36000000);
+		streamDeck.logger.info(`----------CLAMPEDMS ${clampedMs}`);
 		const intervalId = setInterval(setKeyInfo, clampedMs, ev, true)[Symbol.toPrimitive]();		;
 		streamDeck.logger.info(`----------INTERVALID ${intervalId}`);
 		ev.action.setSettings({ intervalId })
 	}
+
+	// Always update the weather. Even if the user has auto-refresh set, they can update the weather manually.
 	streamDeck.logger.info('----------NOINTERVAL');
 	return setKeyInfo(ev, false)
 }
 
 /**
- * Retrieve the user's provided interval setting, parsing the value,
- * clamping it between 0 and 60, and converting to milliseconds.
+ * Retrieve the user's provided interval setting, parsing the value.
+ * If it is 0 or blank, return 0.
+ * If between 5 and 60, and converting to milliseconds.
  */
-async function getIntervalMs(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent): Promise<number> {
-	const { interval } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
-	const sec = parseInt(interval, 10);
-	streamDeck.logger.info(`----------INTERVAL ${sec}`);
+async function getRefreshTimeMs(ev: WillAppearEvent|KeyDownEvent): Promise<number> {
+	const { refreshTime } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+	streamDeck.logger.info(`----------SEC ${refreshTime}`);
 
-	if (sec > 0) {
-		return Math.min(Math.max(sec, 0), 60) * 60 * 1000;
+	if (refreshTime > 4) {
+		return clamp(refreshTime, 5, 60) * 60 * 1000;
 	}
 
 	return 0;
@@ -80,12 +90,14 @@ async function getIntervalMs(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDown
 /**
  * Set the image and title of the key based on current weather information.
  */
-async function setKeyInfo(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent, fromInterval: boolean): Promise<void> {
+async function setKeyInfo(ev: WillAppearEvent|KeyDownEvent, fromInterval: boolean): Promise<void> {
 	if (fromInterval) {
-		const { interval } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
-		streamDeck.logger.info(`----------FROMINTERVAL ${interval}`);
+		const { refreshTime } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+		streamDeck.logger.info(`----------FROMINTERVAL ${refreshTime}`);
 	}
 
+	// streamDeck.logger.info(`----------PSUEDOFETCH`);
+	// return ev.action.setTitle('PSUEDO');
 	const { temperature, humidity, windspeed, icon } = await fetchWeather();
 	if (VALID_ICONS.includes(icon)) {
 		// TODO: add unknown icon
@@ -192,13 +204,17 @@ function splitLatLong(latLong: string) {
 	return { latitude, longitude } as { latitude: string, longitude: string};
 }
 
+function clamp(value: number, min: number, max: number) {
+	return Math.max(Math.min(value, max), min);
+}
+
 /**
  * User-provided settings for {@link DisplayWeather}.
  */
 type LocalWeatherSettings = {
 	openweatherApiKey: string;
 	latLong: string;
-	interval: string;
+	refreshTime: number;
 	intervalId?: number;
 };
 
@@ -210,8 +226,8 @@ type WeatherActionSettings = {
  */
 type WeatherData = {
     temperature: number;
-	humidity: number;
-	windspeed: number;
+		humidity: number;
+		windspeed: number;
     description: string;
     icon: string
 }

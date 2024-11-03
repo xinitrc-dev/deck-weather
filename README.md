@@ -1,7 +1,7 @@
 # Local Weather StreamDeck Plugin
 Displays the weather conditions at a location of your choosing. Press the button and/or set an update interval to get the latest conditions.
 
-## Configuring for use:
+## Configuring for Use
 1. *OpenWeather API key (required).* Go to https://openweathermap.org/, create an account, and generate a key.
 2. *Latitude/Longitude (required).* The coordinates of the location you LocalWeather to display.
     - The easiest way to get these is by right-clicking on the desired location in Google Maps. The first item in the context menu that appears are the location's coordinates, click it to copy them to your clipboard. You can then paste it right into the plugin's setting.

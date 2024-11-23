@@ -13,6 +13,13 @@ First, install the StreamDeck CLI tools:
 npm install -g @elgato/cli
 ```
 
+Start the plugin locally to test behavior pre-build:
+```
+npm run watch
+```
+
+If the plugin is not picking up code changes, you may need to uninstall the plugin, kill and restart the `watch` process, and re-add the plugin in your Deck device.
+
 To package the plugin:
 ```
 streamdeck pack com.luke-abel.local-weather.sdPlugin -f

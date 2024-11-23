@@ -1,6 +1,8 @@
-import { action, streamDeck, KeyDownEvent, SingletonAction, WillAppearEvent, SendToPluginEvent } from "@elgato/streamdeck";
+import { action, streamDeck, KeyDownEvent, SingletonAction, WillAppearEvent, SendToPluginEvent, DidReceiveGlobalSettingsEvent } from "@elgato/streamdeck";
 import { clear } from "console";
 import * as https from 'https';
+import { createSettingsStore } from '../store'
+import { LocalWeatherSettings, WeatherData, OpenWeatherResponse } from '../types'
 
 // These icons are part of the current OpenWeather API specification.
 const VALID_ICONS = [
@@ -9,17 +11,18 @@ const VALID_ICONS = [
 	'11d', '11n', '13d', '13n', '50d', '50n',
 ];
 
+const settingsStore = createSettingsStore();
+
+streamDeck.settings.onDidReceiveGlobalSettings((ev: DidReceiveGlobalSettingsEvent<LocalWeatherSettings>) => {
+	streamDeck.logger.info(`----------DIDRECEIVEGLOBAL ${ev.settings.refreshTime}`);
+	// TODO: set settings if they are different than ones in store
+});
+
 /**
  * An action class that displays current weather information when the current button is pressed.
  */
 @action({ UUID: "com.luke-abel.local-weather.display-weather" })
 export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
-
-	// override async onSendToPlugin(ev: SendToPluginEvent<LocalWeatherSettings, LocalWeatherSettings>): Promise<void> {
-	// 	streamDeck.logger.info('----------SENDTOPLUGIN');
-	// 	return beginInterval(ev, true);
-	// }
-
 	/**
 	 * The {@link SingletonAction.onWillAppear} event is useful for setting the
 	 * visual representation of an action when it becomes visible.
@@ -27,7 +30,9 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	 */
 	override async onWillAppear(ev: WillAppearEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONWILLAPPEAR');
-		return beginInterval(ev, false);
+		const { refreshTime } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+		// TODO: set settings to settings store in these actions
+		return beginInterval(ev, refreshTime, false);
 	}
 
 	/**
@@ -36,17 +41,17 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	 */
 	override async onKeyDown(ev: KeyDownEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONKEYDOWN');
-		return beginInterval(ev, true);
+		const { refreshTime } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+		return beginInterval(ev, refreshTime, true);
 	}
 }
 
 /**
  * If configured, wraps setKeyInfo in an interval. Otherwise, simply passes-through to setKeyInfo.
  */
-async function beginInterval(ev: WillAppearEvent|KeyDownEvent, clearRefresh: boolean) {
-	const { refreshTime } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+async function beginInterval(ev: WillAppearEvent|KeyDownEvent, refreshTime: number, clearRefresh: boolean) {
 	let { intervalId } = await ev.action.getSettings() as LocalWeatherSettings;	
-	const ms = await getRefreshTimeMs(ev);
+	const ms = getRefreshTimeMs(refreshTime);
 
 	// Clear the auto-refresh, likely because the user has provided a new refreshTime.
 	if (intervalId && clearRefresh) {
@@ -61,14 +66,14 @@ async function beginInterval(ev: WillAppearEvent|KeyDownEvent, clearRefresh: boo
 		streamDeck.logger.info(`----------MS ${ms}`);
 		const clampedMs = clamp(ms, 300000, 36000000);
 		streamDeck.logger.info(`----------CLAMPEDMS ${clampedMs}`);
-		const intervalId = setInterval(setKeyInfo, clampedMs, ev, true)[Symbol.toPrimitive]();		;
+		const intervalId = setInterval(setKeyInfo, clampedMs, ev, true, refreshTime)[Symbol.toPrimitive]();		;
 		streamDeck.logger.info(`----------INTERVALID ${intervalId}`);
 		ev.action.setSettings({ intervalId })
 	}
 
 	// Always update the weather. Even if the user has auto-refresh set, they can update the weather manually.
 	streamDeck.logger.info('----------NOINTERVAL');
-	return setKeyInfo(ev, false)
+	return setKeyInfo(ev, false, refreshTime)
 }
 
 /**
@@ -76,8 +81,7 @@ async function beginInterval(ev: WillAppearEvent|KeyDownEvent, clearRefresh: boo
  * If it is 0 or blank, return 0.
  * If between 5 and 60, and converting to milliseconds.
  */
-async function getRefreshTimeMs(ev: WillAppearEvent|KeyDownEvent): Promise<number> {
-	const { refreshTime } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+function getRefreshTimeMs(refreshTime: number): number {
 	streamDeck.logger.info(`----------SEC ${refreshTime}`);
 
 	if (refreshTime > 4) {
@@ -90,9 +94,8 @@ async function getRefreshTimeMs(ev: WillAppearEvent|KeyDownEvent): Promise<numbe
 /**
  * Set the image and title of the key based on current weather information.
  */
-async function setKeyInfo(ev: WillAppearEvent|KeyDownEvent, fromInterval: boolean): Promise<void> {
+async function setKeyInfo(ev: WillAppearEvent|KeyDownEvent, fromInterval: boolean, refreshTime: number): Promise<void> {
 	if (fromInterval) {
-		const { refreshTime } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
 		streamDeck.logger.info(`----------FROMINTERVAL ${refreshTime}`);
 	}
 
@@ -207,45 +210,3 @@ function splitLatLong(latLong: string) {
 function clamp(value: number, min: number, max: number) {
 	return Math.max(Math.min(value, max), min);
 }
-
-/**
- * User-provided settings for {@link DisplayWeather}.
- */
-type LocalWeatherSettings = {
-	openweatherApiKey: string;
-	latLong: string;
-	refreshTime: number;
-	intervalId?: number;
-};
-
-type WeatherActionSettings = {
-};
-
-/**
- * Data fetched from the OpenWeatherAPI.
- */
-type WeatherData = {
-    temperature: number;
-		humidity: number;
-		windspeed: number;
-    description: string;
-    icon: string
-}
-
-/**
- * Shape of the OpenWeather API response.
- */
-type OpenWeatherResponse = {
-	weather: {
-        description: string;
-        icon: string;
-    }[];
-    main: {
-        temp: number;
-		humidity: number;
-    };
-	wind: {
-		speed: number;
-	};
-	name: string;
-};

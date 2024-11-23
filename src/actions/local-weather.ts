@@ -13,9 +13,25 @@ const VALID_ICONS = [
 
 const settingsStore = createSettingsStore();
 
+// TODO: replace global references to settings with references to settingsStore
+const upsertSettings = function (newSettings: LocalWeatherSettings) {
+	const currentSettings = settingsStore.get();
+
+	const hasNewValue = currentSettings.refreshTime !== newSettings.refreshTime
+		|| currentSettings.openweatherApiKey !== newSettings.openweatherApiKey
+		|| currentSettings.latLong !== newSettings.latLong
+
+	if (hasNewValue) {
+		streamDeck.logger.info(`----------HASNEWVALUE ${newSettings.refreshTime}`);
+		settingsStore.set(newSettings);
+	}
+
+	streamDeck.logger.info(`----------HASCURRENTVALUE ${currentSettings.refreshTime}`);
+}
+
 streamDeck.settings.onDidReceiveGlobalSettings((ev: DidReceiveGlobalSettingsEvent<LocalWeatherSettings>) => {
 	streamDeck.logger.info(`----------DIDRECEIVEGLOBAL ${ev.settings.refreshTime}`);
-	// TODO: set settings if they are different than ones in store
+	upsertSettings(ev.settings);
 });
 
 /**
@@ -30,9 +46,9 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	 */
 	override async onWillAppear(ev: WillAppearEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONWILLAPPEAR');
-		const { refreshTime } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
-		// TODO: set settings to settings store in these actions
-		return beginInterval(ev, refreshTime, false);
+		const settings = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+		upsertSettings(settings);
+		return beginInterval(ev, settings.refreshTime, false);
 	}
 
 	/**
@@ -41,8 +57,9 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	 */
 	override async onKeyDown(ev: KeyDownEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONKEYDOWN');
-		const { refreshTime } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
-		return beginInterval(ev, refreshTime, true);
+		const settings = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+		upsertSettings(settings);
+		return beginInterval(ev, settings.refreshTime, true);
 	}
 }
 

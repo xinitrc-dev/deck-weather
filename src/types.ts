@@ -5,7 +5,6 @@ type LocalWeatherSettings = {
 	openweatherApiKey: string;
 	latLong: string;
 	refreshTime: number;
-	intervalId?: number;
 };
 
 /**
@@ -37,4 +36,9 @@ type OpenWeatherResponse = {
 	name: string;
 };
 
-export { LocalWeatherSettings, WeatherData, OpenWeatherResponse };
+type Store = {
+  get: Function,
+  set: Function
+}
+
+export { LocalWeatherSettings, WeatherData, OpenWeatherResponse, Store };

@@ -18,7 +18,7 @@ Start the plugin locally to test behavior pre-build:
 npm run watch
 ```
 
-If the plugin is not picking up code changes, you may need to uninstall the plugin, kill and restart the `watch` process, and re-add the plugin in your Deck device.
+If the plugin is not picking up code changes, you may need to uninstall the plugin, kill and restart the `watch` process, and re-add the plugin in your Deck device. You may also need to relink the plugin to your StreamDeck instance using `streamdeck link com.luke-abel.local-weather.sdPlugin`.
 
 To package the plugin:
 ```

@@ -1,6 +1,6 @@
 import { action, streamDeck, KeyDownEvent, SingletonAction, WillAppearEvent, SendToPluginEvent, DidReceiveGlobalSettingsEvent } from "@elgato/streamdeck";
 import { clear } from "console";
-import { createSettingsStore } from '../store'
+import { createSettingsStore, upsertSettings, createIntervalIdStore, upsertIntervalId } from '../store'
 import { openweatherData } from '../client/open-weather'
 import { LocalWeatherSettings, WeatherData } from '../types'
 
@@ -11,27 +11,18 @@ const VALID_ICONS = [
 	'11d', '11n', '13d', '13n', '50d', '50n',
 ];
 
+// Init Store
 const settingsStore = createSettingsStore();
+const intervalIdStore = createIntervalIdStore();
 
 // TODO: replace global references to settings with references to settingsStore
-const upsertSettings = function (newSettings: LocalWeatherSettings) {
-	const currentSettings = settingsStore.get();
-
-	const hasNewValue = currentSettings.refreshTime !== newSettings.refreshTime
-		|| currentSettings.openweatherApiKey !== newSettings.openweatherApiKey
-		|| currentSettings.latLong !== newSettings.latLong
-
-	if (hasNewValue) {
-		streamDeck.logger.info(`----------HASNEWVALUE ${newSettings.refreshTime}`);
-		settingsStore.set(newSettings);
-	}
-
-	streamDeck.logger.info(`----------HASCURRENTVALUE ${currentSettings.refreshTime}`);
-}
-
 streamDeck.settings.onDidReceiveGlobalSettings((ev: DidReceiveGlobalSettingsEvent<LocalWeatherSettings>) => {
 	streamDeck.logger.info(`----------DIDRECEIVEGLOBAL ${ev.settings.refreshTime}`);
-	upsertSettings(ev.settings);
+	const settingsDidChange = upsertSettings(settingsStore, ev.settings);
+	if (settingsDidChange) {
+		streamDeck.logger.info(`----------STARTINGFROMRECEIVE`);
+		// TODO: find a way to pass an action even (not global event) to beginInterval and thus setKeyInfo
+	}
 });
 
 /**
@@ -47,8 +38,8 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	override async onWillAppear(ev: WillAppearEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONWILLAPPEAR');
 		const settings = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
-		upsertSettings(settings);
-		return beginInterval(ev, settings.refreshTime, false);
+		upsertSettings(settingsStore, settings);
+		return beginInterval(ev, settingsStore.get().refreshTime, true);
 	}
 
 	/**
@@ -58,8 +49,8 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	override async onKeyDown(ev: KeyDownEvent<LocalWeatherSettings>): Promise<void> {
 		streamDeck.logger.info('----------ONKEYDOWN');
 		const settings = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
-		upsertSettings(settings);
-		return beginInterval(ev, settings.refreshTime, true);
+		upsertSettings(settingsStore, settings);
+		return beginInterval(ev, settingsStore.get().refreshTime, true);
 	}
 }
 
@@ -67,7 +58,8 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
  * If configured, wraps setKeyInfo in an interval. Otherwise, simply passes-through to setKeyInfo.
  */
 async function beginInterval(ev: WillAppearEvent|KeyDownEvent, refreshTime: number, clearRefresh: boolean) {
-	let { intervalId } = await ev.action.getSettings() as LocalWeatherSettings;	
+	let intervalId = intervalIdStore.get();
+
 	const ms = getRefreshTimeMs(refreshTime);
 
 	// Clear the auto-refresh, likely because the user has provided a new refreshTime.
@@ -83,9 +75,9 @@ async function beginInterval(ev: WillAppearEvent|KeyDownEvent, refreshTime: numb
 		streamDeck.logger.info(`----------MS ${ms}`);
 		const clampedMs = clamp(ms, 300000, 36000000);
 		streamDeck.logger.info(`----------CLAMPEDMS ${clampedMs}`);
-		const intervalId = setInterval(setKeyInfo, clampedMs, ev, true, refreshTime)[Symbol.toPrimitive]();		;
+		const newIntervalId = setInterval(setKeyInfo, clampedMs, ev, true, refreshTime)[Symbol.toPrimitive]();		;
 		streamDeck.logger.info(`----------INTERVALID ${intervalId}`);
-		ev.action.setSettings({ intervalId })
+		upsertIntervalId(intervalIdStore, newIntervalId);
 	}
 
 	// Always update the weather. Even if the user has auto-refresh set, they can update the weather manually.
@@ -116,8 +108,6 @@ async function setKeyInfo(ev: WillAppearEvent|KeyDownEvent, fromInterval: boolea
 		streamDeck.logger.info(`----------FROMINTERVAL ${refreshTime}`);
 	}
 
-	// streamDeck.logger.info(`----------PSUEDOFETCH`);
-	// return ev.action.setTitle('PSUEDO');
 	const { temperature, humidity, windspeed, icon } = await fetchWeather();
 	if (VALID_ICONS.includes(icon)) {
 		// TODO: add unknown icon

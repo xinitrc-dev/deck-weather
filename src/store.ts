@@ -1,28 +1,65 @@
-import { LocalWeatherSettings } from './types'
+import { streamDeck } from "@elgato/streamdeck";
+import { LocalWeatherSettings, Store } from './types'
 
-function createSettingsStore() {
+function createSettingsStore(): Store {
   let settings = {
     openweatherApiKey: '',
     latLong: '',
     refreshTime: 0
   };
 
-  let version = 0;
-
   return {
     get: function (): LocalWeatherSettings {
       return settings;
     },
     set: function (newSettings: LocalWeatherSettings) {
-      version++;
       settings = newSettings;
-    },
-    getVersion: function () {
-      return version;
-    },
+    }
   };
 }
 
-// TODO: create interval store?
+function upsertSettings(store: Store, newSettings: LocalWeatherSettings): Boolean {
+	const currentSettings = store.get();
+	const hasNewValue = currentSettings.refreshTime !== newSettings.refreshTime
+		|| currentSettings.openweatherApiKey !== newSettings.openweatherApiKey
+		|| currentSettings.latLong !== newSettings.latLong;
 
-export { createSettingsStore };
+	if (hasNewValue) {
+		streamDeck.logger.info(`----------HASNEWVALUE ${newSettings.refreshTime}`);
+		store.set(newSettings);
+		return true;
+	}
+
+	streamDeck.logger.info(`----------HASCURRENTVALUE ${currentSettings.refreshTime}`);
+	return false;
+}
+
+
+function createIntervalIdStore(): Store {
+  let intervalId = 0;
+
+  return {
+    get: function (): Number {
+      return intervalId;
+    },
+    set: function (newIntervalId: Number) {
+      newIntervalId = intervalId;
+    }
+  };
+}
+
+function upsertIntervalId(store: Store, newIntervalId: Number): Boolean {
+	const currentIntervalId = store.get();
+	const hasNewValue = currentIntervalId !== newIntervalId;
+
+	if (hasNewValue) {
+		streamDeck.logger.info(`----------HASNEWINTERVALID ${newIntervalId}`);
+		store.set(newIntervalId);
+		return true;
+	}
+
+  return false;
+}
+
+// TODO: create interval store?
+export { createSettingsStore, upsertSettings, createIntervalIdStore, upsertIntervalId };

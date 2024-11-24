@@ -1,4 +1,13 @@
-import { action, streamDeck, KeyDownEvent, SingletonAction, WillAppearEvent, SendToPluginEvent, DidReceiveGlobalSettingsEvent } from "@elgato/streamdeck";
+import {
+	DialAction,
+	DidReceiveGlobalSettingsEvent,
+	KeyAction,
+	KeyDownEvent,
+	SingletonAction,
+	WillAppearEvent,
+	action,
+	streamDeck,
+} from "@elgato/streamdeck";
 import { clear } from "console";
 import { createSettingsStore, upsertSettings, createIntervalIdStore, upsertIntervalId } from '../store'
 import { openweatherData } from '../client/open-weather'
@@ -15,20 +24,12 @@ const VALID_ICONS = [
 const settingsStore = createSettingsStore();
 const intervalIdStore = createIntervalIdStore();
 
-// TODO: replace global references to settings with references to settingsStore
-streamDeck.settings.onDidReceiveGlobalSettings((ev: DidReceiveGlobalSettingsEvent<LocalWeatherSettings>) => {
-	streamDeck.logger.info(`----------DIDRECEIVEGLOBAL ${ev.settings.refreshTime}`);
-	const settingsDidChange = upsertSettings(settingsStore, ev.settings);
-	if (settingsDidChange) {
-		streamDeck.logger.info(`----------STARTINGFROMRECEIVE`);
-		// TODO: find a way to pass an action even (not global event) to beginInterval and thus setKeyInfo
-	}
-});
+const UUID = "com.luke-abel.local-weather.display-weather";
 
 /**
  * An action class that displays current weather information when the current button is pressed.
  */
-@action({ UUID: "com.luke-abel.local-weather.display-weather" })
+@action({ UUID })
 export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	/**
 	 * The {@link SingletonAction.onWillAppear} event is useful for setting the
@@ -39,7 +40,7 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 		streamDeck.logger.info('----------ONWILLAPPEAR');
 		const settings = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
 		upsertSettings(settingsStore, settings);
-		return beginInterval(ev, settingsStore.get().refreshTime, true);
+		return beginInterval(ev.action, settingsStore.get().refreshTime, true);
 	}
 
 	/**
@@ -50,14 +51,32 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 		streamDeck.logger.info('----------ONKEYDOWN');
 		const settings = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
 		upsertSettings(settingsStore, settings);
-		return beginInterval(ev, settingsStore.get().refreshTime, true);
+		return beginInterval(ev.action, settingsStore.get().refreshTime, true);
 	}
 }
 
 /**
- * If configured, wraps setKeyInfo in an interval. Otherwise, simply passes-through to setKeyInfo.
+ * When the user changes settings in the Property Inspector,
+ * check for changes and begin a new interval if so.
  */
-async function beginInterval(ev: WillAppearEvent|KeyDownEvent, refreshTime: number, clearRefresh: boolean) {
+streamDeck.settings.onDidReceiveGlobalSettings((ev: DidReceiveGlobalSettingsEvent<LocalWeatherSettings>) => {
+	streamDeck.logger.info(`----------DIDRECEIVEGLOBAL ${ev.settings.refreshTime}`);
+	const settingsDidChange = upsertSettings(settingsStore, ev.settings);
+	if (settingsDidChange) {
+		streamDeck.logger.info(`----------STARTINGFROMRECEIVE`);
+		const action = streamDeck.actions.find((a) => a.manifestId === UUID);
+		streamDeck.logger.info(`----------FOUNDACTION ${action}`);
+		if (action) {
+			return beginInterval(action, settingsStore.get().refreshTime, true);
+		}
+	}
+});
+
+/**
+ * If provided with refreshTime, wraps setKeyInfo in an interval. Otherwise, simply passes-through to setKeyInfo.
+ * If indicated to clearRefresh, will clear the current refresh interval (and set a new one if refreshTime).
+ */
+async function beginInterval(action: DialAction|KeyAction, refreshTime: number, clearRefresh: boolean) {
 	let intervalId = intervalIdStore.get();
 
 	const ms = getRefreshTimeMs(refreshTime);
@@ -75,25 +94,25 @@ async function beginInterval(ev: WillAppearEvent|KeyDownEvent, refreshTime: numb
 		streamDeck.logger.info(`----------MS ${ms}`);
 		const clampedMs = clamp(ms, 300000, 36000000);
 		streamDeck.logger.info(`----------CLAMPEDMS ${clampedMs}`);
-		const newIntervalId = setInterval(setKeyInfo, clampedMs, ev, true, refreshTime)[Symbol.toPrimitive]();		;
+		const newIntervalId = setInterval(setKeyInfo, clampedMs, action, true, refreshTime)[Symbol.toPrimitive]();		;
 		streamDeck.logger.info(`----------INTERVALID ${intervalId}`);
 		upsertIntervalId(intervalIdStore, newIntervalId);
 	}
 
 	// Always update the weather. Even if the user has auto-refresh set, they can update the weather manually.
 	streamDeck.logger.info('----------NOINTERVAL');
-	return setKeyInfo(ev, false, refreshTime)
+	return setKeyInfo(action, false, refreshTime)
 }
 
 /**
  * Retrieve the user's provided interval setting, parsing the value.
  * If it is 0 or blank, return 0.
- * If between 5 and 60, and converting to milliseconds.
+ * If between 3 and 60, and converting to milliseconds.
  */
 function getRefreshTimeMs(refreshTime: number): number {
 	streamDeck.logger.info(`----------SEC ${refreshTime}`);
 
-	if (refreshTime > 4) {
+	if (refreshTime > 2 && refreshTime < 61) {
 		return clamp(refreshTime, 5, 60) * 60 * 1000;
 	}
 
@@ -103,7 +122,7 @@ function getRefreshTimeMs(refreshTime: number): number {
 /**
  * Set the image and title of the key based on current weather information.
  */
-async function setKeyInfo(ev: WillAppearEvent|KeyDownEvent, fromInterval: boolean, refreshTime: number): Promise<void> {
+async function setKeyInfo(action: DialAction|KeyAction, fromInterval: boolean, refreshTime: number): Promise<void> {
 	if (fromInterval) {
 		streamDeck.logger.info(`----------FROMINTERVAL ${refreshTime}`);
 	}
@@ -111,9 +130,9 @@ async function setKeyInfo(ev: WillAppearEvent|KeyDownEvent, fromInterval: boolea
 	const { temperature, humidity, windspeed, icon } = await fetchWeather();
 	if (VALID_ICONS.includes(icon)) {
 		// TODO: add unknown icon
-		ev.action.setImage(`imgs/actions/display-weather/${icon}`);
+		action.setImage(`imgs/actions/display-weather/${icon}`);
 	}
-	return ev.action.setTitle(generateTitle(temperature, humidity, windspeed));
+	return action.setTitle(generateTitle(temperature, humidity, windspeed));
 }
 
 /**

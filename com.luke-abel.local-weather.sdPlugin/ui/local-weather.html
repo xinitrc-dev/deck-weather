@@ -11,7 +11,11 @@
     <!--
         Learn more about property inspector components at https://sdpi-components.dev/docs/components
     -->
-    <sdpi-item label="OpenWeather API Key">
+    <sdpi-item>
+        Do not set a title, the plugin will replace it!
+        <p>See the README for instructions on obtaining an API key and finding coordinates.</p>
+    </sdpi-item>
+    <sdpi-item label="OpenWeather API key">
         <sdpi-textfield
             setting="openweatherApiKey"
             global="true"
@@ -19,21 +23,23 @@
             required>
         </sdpi-textfield>
     </sdpi-item>
-    <sdpi-item label="Latitude">
+    <sdpi-item label="Coordinates">
         <sdpi-textfield
-            setting="latitude"
+            setting="latLong"
             global="true"
-            placeholder="12.345"
+            placeholder="39.8309, -77.2311"
             required>
         </sdpi-textfield>
     </sdpi-item>
-    <sdpi-item label="Longitude">
-        <sdpi-textfield
-            setting="longitude"
-            global="true"
-            placeholder="12.345"
-            required>
-        </sdpi-textfield>
+    <sdpi-item label="Refresh every">
+        <sdpi-select setting="refreshTime" global="true" value-type="number">
+            <option value="0">No refresh</option>
+            <option value="3">3 minutes</option>
+            <option value="5">5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="20">20 minutes</option>
+            <option value="30">30 minutes</option>
+        </sdpi-select>
     </sdpi-item>
 </body>
 

@@ -1,162 +1,184 @@
-import { action, streamDeck, DidReceiveSettingsEvent, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
-import * as https from 'https';
+import {
+	DialAction,
+	DidReceiveGlobalSettingsEvent,
+	KeyAction,
+	KeyDownEvent,
+	SingletonAction,
+	WillAppearEvent,
+	action,
+	streamDeck,
+} from "@elgato/streamdeck";
+import { clear } from "console";
+import {
+	createDebounceMemo,
+	memoizeDebounce,
+} from '../memo/debounce'
+import {
+	createSettingsMemo,
+	memoizeSettings,
+} from '../memo/local-weather-settings'
+import { openweatherData } from '../client/open-weather'
+import { LocalWeatherSettings, LocalWeatherActionSettings, WeatherData } from '../types'
+import { createWeatherDataMemo, memoizeWeatherData } from "../memo/weather-data";
 
+const UUID = "com.luke-abel.local-weather.display-weather";
+
+// These values clamp the refresh interval, to prevent excess API requests.
+const REFRESH_MIN_SEC = 3;
+const REFRESH_MAX_SEC = 60;
+const MS_IN_SEC = 60000;
+const DEBOUNCE_MS = 1000;
+
+// These icons are part of the current OpenWeather API specification.
 const VALID_ICONS = [
 	'01d', '01n', '02d', '02n', '03d', '03n',
 	'04d', '04n', '09d', '09n', '10d', '10n',
 	'11d', '11n', '13d', '13n', '50d', '50n',
 ];
 
+const settingsMemo = createSettingsMemo();
+const debounceMemo = createDebounceMemo();
+const weatherDataMemo = createWeatherDataMemo();
+
 /**
- * An action class that displays the current temperature when the current button is pressed.
+ * An action class that displays current weather information when the current button is pressed.
  */
-@action({ UUID: "com.luke-abel.local-weather.display-weather" })
+@action({ UUID })
 export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
-
-	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<LocalWeatherSettings>): Promise<void> {
-		streamDeck.logger.info('----------DIDRECEIVE');
-		return setKeyInfo(ev);
-	}
-
 	/**
-	 * The {@link SingletonAction.onWillAppear} event is useful for setting the visual representation of an action when it becomes visible. This could be due to the Stream Deck first
-	 * starting up, or the user navigating between pages / folders etc.. There is also an inverse of this event in the form of {@link streamDeck.client.onWillDisappear}.
+	 * The {@link SingletonAction.onWillAppear} event is useful for setting the
+	 * visual representation of an action when it becomes visible.
+	 * This could be due to the Stream Deck first starting up, or the user navigating between pages / folders etc.
 	 */
 	override async onWillAppear(ev: WillAppearEvent<LocalWeatherSettings>): Promise<void> {
-		streamDeck.logger.info('----------ONWILLAPPEAR');
-		return setKeyInfo(ev);
+		const settings = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+		memoizeSettings(settingsMemo, settings);
+		return beginInterval(ev.action, settingsMemo.get().refreshTime);
 	}
 
 	/**
-	 * Listens for the {@link SingletonAction.onKeyDown} event which is emitted by Stream Deck when an action is pressed. Stream Deck provides various events for tracking interaction
-	 * with devices including key down/up, dial rotations, and device connectivity, etc. When triggered, {@link ev} object contains information about the event including any payloads
-	 * and action information where applicable.
+	 * Listens for the {@link SingletonAction.onKeyDown} event,
+	 * which is emitted by Stream Deck when an action is pressed.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<LocalWeatherSettings>): Promise<void> {
-		streamDeck.logger.info('----------ONKEYDOWN');
-		return setKeyInfo(ev);
+		const settings = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+		memoizeSettings(settingsMemo, settings);
+		return beginInterval(ev.action, settingsMemo.get().refreshTime);
 	}
 }
 
-async function setKeyInfo(ev: DidReceiveSettingsEvent|WillAppearEvent|KeyDownEvent): Promise<void> {
+/**
+ * This hook provides "hot reloading" of the plugin when settings are changed.
+ */
+streamDeck.settings.onDidReceiveGlobalSettings((ev: DidReceiveGlobalSettingsEvent<LocalWeatherSettings>) => {
+	streamDeck.logger.info(`Detected global settings event (refreshTime: ${ev.settings.refreshTime || 0}min)`);
+	const settingsDidChange = memoizeSettings(settingsMemo, ev.settings);
+	if (settingsDidChange) {
+		streamDeck.logger.info('Detected settings change, triggering interval');
+		const action = streamDeck.actions.find((a) => a.manifestId === UUID);
+		if (action) {
+			return beginInterval(action, settingsMemo.get().refreshTime);
+		}
+	}
+});
+
+/**
+ * If provided with refreshTime, wraps setKeyInfo in an interval. Otherwise,
+ * simply passes-through to setKeyInfo. If indicated to clearRefresh, will
+ * clear the current refresh interval (and set a new one if refreshTime).
+ */
+async function beginInterval(action: DialAction|KeyAction, refreshTime: number) {
+	await endInterval(action);
+	const ms = getRefreshTimeMs(refreshTime);
+
+	// If refreshTime has been set and no interval has, start the interval with the refreshTime.
+	if (ms > 0) {
+		const clampedMs = clamp(ms, 300000, 36000000);
+		streamDeck.logger.info(`Creating inverval with ${clampedMs}ms`);
+		let intervalId = setInterval(setKeyInfo, clampedMs, action, true)[Symbol.toPrimitive]();		;
+		streamDeck.logger.info(`Interval ${intervalId} created`);
+		action.setSettings({ intervalId })
+	}
+
+	// Always update the weather. Even if the user has auto-refresh set, they can update the weather manually.
+	return setKeyInfo(action, false);
+}
+
+/**
+ * End the interval saved to the action.
+ * If an interval is cleared, return true.
+ * @param action 
+ * @returns 
+ */
+async function endInterval(action: DialAction|KeyAction) {
+	let { intervalId } = await action.getSettings() as LocalWeatherActionSettings;
+	if (intervalId) {
+		streamDeck.logger.info(`Clearing interval ${intervalId}`);
+		clearInterval(intervalId);
+		action.setSettings({ intervalId: undefined })
+	}
+}
+
+/**
+ * Retrieve the user's provided interval setting, parsing the value.
+ * If it is 0 or blank, return 0.
+ * If between 3 and 60, and converting to milliseconds.
+ */
+function getRefreshTimeMs(refreshTime: number): number {
+	if (refreshTime >= REFRESH_MIN_SEC && refreshTime <= REFRESH_MAX_SEC) {
+		return clamp(refreshTime, REFRESH_MIN_SEC, REFRESH_MAX_SEC) * MS_IN_SEC;
+	}
+	return 0;
+}
+
+/**
+ * Set the image and title of the key based on current weather information.
+ */
+async function setKeyInfo(action: DialAction|KeyAction, fromInterval: boolean): Promise<void> {
+	streamDeck.logger.info(`Setting keyInfo ${fromInterval ? 'from interval' : 'not from interval'}`);
 	const { temperature, humidity, windspeed, icon } = await fetchWeather();
 	if (VALID_ICONS.includes(icon)) {
 		// TODO: add unknown icon
-		ev.action.setImage(`imgs/actions/display-weather/${icon}`);
+		action.setImage(`imgs/actions/display-weather/${icon}`);
 	}
-	return ev.action.setTitle(generateTitle(temperature, humidity, windspeed));
+	return action.setTitle(generateTitle(temperature, humidity, windspeed));
 }
 
 /**
  * Gather weather information from API fetch.
+ * Because 
  */
-async function fetchWeather() {
-	const { openweatherApiKey, latitude, longitude } = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
-	const weather: WeatherData = await openweatherData(openweatherApiKey, latitude, longitude);
-	return {
-		temperature: weather.temperature,
-		humidity: weather.humidity,
-		windspeed: weather.windspeed,
-		description: weather.description,
-		icon: weather.icon
-	} as DisplayWeatherSettings;
-}
+async function fetchWeather(): Promise<WeatherData> {
+	streamDeck.logger.info('Fetching weather data');
+	const now = Date.now();
 
-function generateTitle(temp: number, humidity: number, windspeed: number) {
-	const roundedTemp = Math.round((temp || 0) * 10) / 10
-	const roundedWind = Math.round((windspeed || 0) * 10) / 10
-	return `${roundedTemp}°, ${humidity}%\n\n\n${roundedWind} mph`
-}
+	// If a new debounce time can be memoized, the debounce period has elapsed
+	// and we can fetch/memoize new data.
+	// If weatherData is empty, also make sure to fetch it.
+	//
+	// Bypassing debounce can lead to multiple requests (~3) when init-ing the plugin.
+	// Currently OpenWeather allows for 1000 requests/day for free. At max refresh of 3min,
+	// that is 480 possible requests/day. Shouldn't be an issue for most users.
+	if (memoizeDebounce(debounceMemo, Date.now()) || weatherDataMemo.isEmpty()) {
+		const { openweatherApiKey, latLong } = settingsMemo.get() as LocalWeatherSettings;
+		const weatherData = await openweatherData(openweatherApiKey, latLong);
+		memoizeWeatherData(weatherDataMemo, weatherData);
+		return weatherData;
+	}
 
-async function openweatherData(apiKey: string, lat: string, lon: string) {
-    return new Promise<WeatherData>((resolve, reject) => {
-        const options = {
-            hostname: 'api.openweathermap.org',
-            port: 443,
-            path: `/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=imperial`,
-            method: 'GET',
-			headers: {
-				'Content-Type': 'application/json',
-			}
-        };
-
-		streamDeck.logger.info('----------REQUEST');
-		streamDeck.logger.info(options);
-
-        const req = https.request(options, (res) => {
-            let data = '';
-
-            res.on('data', (chunk) => {
-                data += chunk;
-            });
-
-            res.on('end', () => {
-                try {
-                    const jsonData = JSON.parse(data);
-
-					streamDeck.logger.info('----------RESPONSE');
-					streamDeck.logger.info(jsonData);
-
-                    // Extract relevant weather information
-                    const temperature = jsonData.main.temp;
-                    const humidity = jsonData.main.humidity;
-                    const windspeed = jsonData.wind.speed;
-                    const description = jsonData.weather[0].description;
-                    const icon = jsonData.weather[0].icon;
-
-                    resolve({ temperature, humidity, windspeed, description, icon } as WeatherData);
-                } catch (error) {
-                    reject(error);
-                }
-            });
-        });
-
-        req.on('error', (error) => {
-            reject(error);
-        });
-
-        req.end();
-    });
+	// Otherwise, return memoized data.
+	return weatherDataMemo.get();
 }
 
 /**
- * Settings for {@link DisplayWeather}.
+ * Generate formatted title containing weather information.
  */
-type LocalWeatherSettings = {
-	// user-provided settings
-	openweatherApiKey: string;
-	latitude: string;
-	longitude: string;
-};
-
-type DisplayWeatherSettings = {
-	// data fetched from API
-	temperature: number;
-	humidity: number;
-	windspeed: number;
-	description: string;
-	icon: string;
-};
-
-type WeatherData = {
-    temperature: number;
-	humidity: number;
-	windspeed: number;
-    description: string;
-    icon: string
+function generateTitle(temp: number, humidity: number, windspeed: number): string {
+	const roundedTemp = Math.round((temp || 0) * 10) / 10
+	const roundedWind = Math.round((windspeed || 0) * 10) / 10
+	return `${roundedTemp}°, ${humidity}%\n\n\n\n${roundedWind} mph`
 }
 
-type OpenWeatherResponse = {
-	weather: {
-        description: string;
-        icon: string;
-    }[];
-    main: {
-        temp: number;
-		humidity: number;
-    };
-	wind: {
-		speed: number;
-	};
-	name: string;
-};
+function clamp(value: number, min: number, max: number) {
+	return Math.max(Math.min(value, max), min);
+}

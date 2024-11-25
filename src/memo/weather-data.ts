@@ -26,6 +26,12 @@ function createWeatherDataMemo(): Memo {
     },
     set: function (newWeatherData: WeatherData) {
       weatherData = newWeatherData;
+    },
+    isEmpty: function (): Boolean {
+      if (weatherData.temperature === 0 && weatherData.humidity === 0) {
+        return true;
+      }
+      return false;
     }
   };
 }

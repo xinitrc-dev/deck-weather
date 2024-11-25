@@ -68,8 +68,7 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 }
 
 /**
- * When the user changes settings in the Property Inspector,
- * check for changes and begin a new interval if so.
+ * This hook provides "hot reloading" of the plugin when settings are changed.
  */
 streamDeck.settings.onDidReceiveGlobalSettings((ev: DidReceiveGlobalSettingsEvent<LocalWeatherSettings>) => {
 	streamDeck.logger.info(`Detected global settings event (refreshTime: ${ev.settings.refreshTime || 0}min)`);
@@ -147,6 +146,7 @@ async function setKeyInfo(action: DialAction|KeyAction, fromInterval: boolean): 
 
 /**
  * Gather weather information from API fetch.
+ * Because 
  */
 async function fetchWeather(): Promise<WeatherData> {
 	streamDeck.logger.info('Fetching weather data');
@@ -154,7 +154,12 @@ async function fetchWeather(): Promise<WeatherData> {
 
 	// If a new debounce time can be memoized, the debounce period has elapsed
 	// and we can fetch/memoize new data.
-	if (memoizeDebounce(debounceMemo, Date.now())) {
+	// If weatherData is empty, also make sure to fetch it.
+	//
+	// Bypassing debounce can lead to multiple requests (~3) when init-ing the plugin.
+	// Currently OpenWeather allows for 1000 requests/day for free. At max refresh of 3min,
+	// that is 480 possible requests/day. Shouldn't be an issue for most users.
+	if (memoizeDebounce(debounceMemo, Date.now()) || weatherDataMemo.isEmpty()) {
 		const { openweatherApiKey, latLong } = settingsMemo.get() as LocalWeatherSettings;
 		const weatherData = await openweatherData(openweatherApiKey, latLong);
 		memoizeWeatherData(weatherDataMemo, weatherData);

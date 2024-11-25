@@ -20,6 +20,12 @@ function createDebounceMemo(): Memo {
     },
     set: function (newDebounceTime: number) {
       debounceTime = newDebounceTime;
+    },
+    isEmpty: function (): Boolean {
+      if (debounceTime = 0) {
+        return true;
+      }
+      return false;
     }
   };
 }

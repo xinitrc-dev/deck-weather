@@ -20,6 +20,12 @@ function createSettingsMemo(): Memo {
     },
     set: function (newSettings: LocalWeatherSettings) {
       settings = newSettings;
+    },
+    isEmpty: function (): Boolean {
+      if (!!settings.openweatherApiKey) {
+        return true;
+      }
+      return false;
     }
   };
 }

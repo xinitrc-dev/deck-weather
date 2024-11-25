@@ -43,7 +43,8 @@ type OpenWeatherResponse = {
 
 type Memo = {
   get: Function,
-  set: Function
+  set: Function,
+  isEmpty:Function
 }
 
 export { LocalWeatherSettings, LocalWeatherActionSettings, WeatherData, OpenWeatherResponse, Memo };

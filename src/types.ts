@@ -9,6 +9,7 @@ type LocalWeatherSettings = {
 
 type LocalWeatherActionSettings = {
   intervalId?: number;
+  debounceStart?:number;
 }
 
 /**

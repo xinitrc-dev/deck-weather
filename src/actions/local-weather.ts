@@ -10,11 +10,16 @@ import {
 } from "@elgato/streamdeck";
 import { clear } from "console";
 import {
+	createDebounceMemo,
+	memoizeDebounce,
+} from '../memo/debounce'
+import {
 	createSettingsMemo,
 	memoizeSettings,
 } from '../memo/local-weather-settings'
 import { openweatherData } from '../client/open-weather'
 import { LocalWeatherSettings, LocalWeatherActionSettings, WeatherData } from '../types'
+import { createWeatherDataMemo, memoizeWeatherData } from "../memo/weather-data";
 
 const UUID = "com.luke-abel.local-weather.display-weather";
 
@@ -22,6 +27,7 @@ const UUID = "com.luke-abel.local-weather.display-weather";
 const REFRESH_MIN_SEC = 3;
 const REFRESH_MAX_SEC = 60;
 const MS_IN_SEC = 60000;
+const DEBOUNCE_MS = 1000;
 
 // These icons are part of the current OpenWeather API specification.
 const VALID_ICONS = [
@@ -31,6 +37,8 @@ const VALID_ICONS = [
 ];
 
 const settingsMemo = createSettingsMemo();
+const debounceMemo = createDebounceMemo();
+const weatherDataMemo = createWeatherDataMemo();
 
 /**
  * An action class that displays current weather information when the current button is pressed.
@@ -64,7 +72,7 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
  * check for changes and begin a new interval if so.
  */
 streamDeck.settings.onDidReceiveGlobalSettings((ev: DidReceiveGlobalSettingsEvent<LocalWeatherSettings>) => {
-	streamDeck.logger.info(`Detected global settings event (refreshTime: ${ev.settings.refreshTime || 0}s)`);
+	streamDeck.logger.info(`Detected global settings event (refreshTime: ${ev.settings.refreshTime || 0}min)`);
 	const settingsDidChange = memoizeSettings(settingsMemo, ev.settings);
 	if (settingsDidChange) {
 		streamDeck.logger.info('Detected settings change, triggering interval');
@@ -76,15 +84,16 @@ streamDeck.settings.onDidReceiveGlobalSettings((ev: DidReceiveGlobalSettingsEven
 });
 
 /**
- * If provided with refreshTime, wraps setKeyInfo in an interval. Otherwise, simply passes-through to setKeyInfo.
- * If indicated to clearRefresh, will clear the current refresh interval (and set a new one if refreshTime).
+ * If provided with refreshTime, wraps setKeyInfo in an interval. Otherwise,
+ * simply passes-through to setKeyInfo. If indicated to clearRefresh, will
+ * clear the current refresh interval (and set a new one if refreshTime).
  */
 async function beginInterval(action: DialAction|KeyAction, refreshTime: number) {
-	const didClearInterval = await endInterval(action);
+	await endInterval(action);
 	const ms = getRefreshTimeMs(refreshTime);
 
 	// If refreshTime has been set and no interval has, start the interval with the refreshTime.
-	if (ms > 0 && didClearInterval) {
+	if (ms > 0) {
 		const clampedMs = clamp(ms, 300000, 36000000);
 		streamDeck.logger.info(`Creating inverval with ${clampedMs}ms`);
 		let intervalId = setInterval(setKeyInfo, clampedMs, action, true)[Symbol.toPrimitive]();		;
@@ -93,7 +102,7 @@ async function beginInterval(action: DialAction|KeyAction, refreshTime: number) 
 	}
 
 	// Always update the weather. Even if the user has auto-refresh set, they can update the weather manually.
-	return setKeyInfo(action, false)
+	return setKeyInfo(action, false);
 }
 
 /**
@@ -102,15 +111,13 @@ async function beginInterval(action: DialAction|KeyAction, refreshTime: number) 
  * @param action 
  * @returns 
  */
-async function endInterval(action: DialAction|KeyAction): Promise<Boolean> {
+async function endInterval(action: DialAction|KeyAction) {
 	let { intervalId } = await action.getSettings() as LocalWeatherActionSettings;
 	if (intervalId) {
 		streamDeck.logger.info(`Clearing interval ${intervalId}`);
 		clearInterval(intervalId);
 		action.setSettings({ intervalId: undefined })
-		return true;
 	}
-	return false;
 }
 
 /**
@@ -125,12 +132,11 @@ function getRefreshTimeMs(refreshTime: number): number {
 	return 0;
 }
 
-
 /**
  * Set the image and title of the key based on current weather information.
  */
 async function setKeyInfo(action: DialAction|KeyAction, fromInterval: boolean): Promise<void> {
-	streamDeck.logger.info(`Setting keyInfo${fromInterval && ' from interval'}`);
+	streamDeck.logger.info(`Setting keyInfo ${fromInterval ? 'from interval' : 'not from interval'}`);
 	const { temperature, humidity, windspeed, icon } = await fetchWeather();
 	if (VALID_ICONS.includes(icon)) {
 		// TODO: add unknown icon
@@ -144,8 +150,19 @@ async function setKeyInfo(action: DialAction|KeyAction, fromInterval: boolean): 
  */
 async function fetchWeather(): Promise<WeatherData> {
 	streamDeck.logger.info('Fetching weather data');
-	const { openweatherApiKey, latLong } = settingsMemo.get() as LocalWeatherSettings;
-	return await openweatherData(openweatherApiKey, latLong);
+	const now = Date.now();
+
+	// If a new debounce time can be memoized, the debounce period has elapsed
+	// and we can fetch/memoize new data.
+	if (memoizeDebounce(debounceMemo, Date.now())) {
+		const { openweatherApiKey, latLong } = settingsMemo.get() as LocalWeatherSettings;
+		const weatherData = await openweatherData(openweatherApiKey, latLong);
+		memoizeWeatherData(weatherDataMemo, weatherData);
+		return weatherData;
+	}
+
+	// Otherwise, return memoized data.
+	return weatherDataMemo.get();
 }
 
 /**

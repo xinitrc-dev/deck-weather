@@ -7,7 +7,7 @@ import { LocalWeatherSettings, Memo } from '../types'
  * @returns Object with .get() and .set()
  */
 function createSettingsMemo(): Memo {
-  streamDeck.logger.info('Creating settings store');
+  streamDeck.logger.info('Creating settings memo');
   let settings = {
     openweatherApiKey: '',
     latLong: '',
@@ -24,16 +24,20 @@ function createSettingsMemo(): Memo {
   };
 }
 
-function memoizeSettings(store: Memo, newSettings: LocalWeatherSettings): Boolean {
-  streamDeck.logger.info(`Upserting settings: ${newSettings.refreshTime || 0}s`);
-	const currentSettings = store.get();
+/**
+ * Rules for whether to memoize a value.
+ * @returns Boolean value on whether memoization occurred.
+ */
+function memoizeSettings(memo: Memo, newSettings: LocalWeatherSettings): Boolean {
+  streamDeck.logger.info(`Memoizing settings: ${newSettings.refreshTime || 0}min`);
+	const currentSettings = memo.get();
 	const hasNewValue = currentSettings.refreshTime !== newSettings.refreshTime
 		|| currentSettings.openweatherApiKey !== newSettings.openweatherApiKey
 		|| currentSettings.latLong !== newSettings.latLong;
 
 	if (hasNewValue) {
 		streamDeck.logger.info('New settings detected');
-		store.set(newSettings);
+		memo.set(newSettings);
 		return true;
 	}
 

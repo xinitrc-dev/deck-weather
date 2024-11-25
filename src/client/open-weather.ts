@@ -18,7 +18,7 @@ async function openweatherData(apiKey: string, latLong: string) {
 			}
         };
 
-		streamDeck.logger.info('----------REQUEST');
+		streamDeck.logger.info('API REQUEST');
 		streamDeck.logger.info(options);
 
         const req = https.request(options, (res) => {
@@ -32,7 +32,7 @@ async function openweatherData(apiKey: string, latLong: string) {
                 try {
                     const jsonData = JSON.parse(data);
 
-					streamDeck.logger.info('----------RESPONSE');
+					streamDeck.logger.info('API RESPONSE');
 					streamDeck.logger.info(jsonData);
 
                     // Extract relevant weather information

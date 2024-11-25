@@ -7,6 +7,10 @@ type LocalWeatherSettings = {
 	refreshTime: number;
 };
 
+type LocalWeatherActionSettings = {
+  intervalId?: number;
+}
+
 /**
  * Data fetched from the OpenWeatherAPI.
  */
@@ -36,9 +40,9 @@ type OpenWeatherResponse = {
 	name: string;
 };
 
-type Store = {
+type Memo = {
   get: Function,
   set: Function
 }
 
-export { LocalWeatherSettings, WeatherData, OpenWeatherResponse, Store };
+export { LocalWeatherSettings, LocalWeatherActionSettings, WeatherData, OpenWeatherResponse, Memo };

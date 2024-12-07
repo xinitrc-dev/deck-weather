@@ -1,14 +1,14 @@
 {
-	"Name": "DeckWeather",
+	"Name": "Deck Weather",
 	"Version": "0.1.0.0",
 	"Author": "Luke Abel",
 	"Actions": [
 		{
 			"Name": "Weather",
-			"UUID": "com.luke-abel.deckweather.weather",
+			"UUID": "com.luke-abel.deck-weather.weather",
 			"Icon": "imgs/actions/weather/icon",
 			"Tooltip": "Displays current temperature for a given location.",
-			"PropertyInspectorPath": "ui/deckweather.html",
+			"PropertyInspectorPath": "ui/deck-weather.html",
 			"Controllers": [
 				"Keypad"
 			],
@@ -20,7 +20,7 @@
 			]
 		}
 	],
-	"Category": "DeckWeather",
+	"Category": "Deck Weather",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "bin/plugin.js",
 	"Description": "Weather conditions for a location of your choosing",
@@ -43,5 +43,5 @@
 		"Version": "20",
 		"Debug": "enabled"
 	},
-	"UUID": "com.luke-abel.deckweather"
+	"UUID": "com.luke-abel.deck-weather"
 }

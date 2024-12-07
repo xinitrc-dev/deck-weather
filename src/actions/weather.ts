@@ -21,7 +21,7 @@ import { openweatherData } from '../client/openweather'
 import { WeatherSettings, WeatherActionSettings, WeatherData } from '../types'
 import { createWeatherDataMemo, memoizeWeatherData } from "../memo/weather-data";
 
-const UUID = "com.luke-abel.deckweather.weather";
+const UUID = "com.luke-abel.deck-weather.weather";
 
 // These values clamp the refresh interval, to prevent excess API requests.
 const REFRESH_MIN_SEC = 3;

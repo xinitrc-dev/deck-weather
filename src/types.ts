@@ -1,13 +1,13 @@
 /**
  * User-provided settings for {@link DisplayWeather}.
  */
-type LocalWeatherSettings = {
+type WeatherSettings = {
 	openweatherApiKey: string;
 	latLong: string;
 	refreshTime: number;
 };
 
-type LocalWeatherActionSettings = {
+type WeatherActionSettings = {
   intervalId?: number;
   debounceStart?:number;
 }
@@ -47,4 +47,4 @@ type Memo = {
   isEmpty:Function
 }
 
-export { LocalWeatherSettings, LocalWeatherActionSettings, WeatherData, OpenWeatherResponse, Memo };
+export { WeatherSettings, WeatherActionSettings, WeatherData, OpenWeatherResponse, Memo };

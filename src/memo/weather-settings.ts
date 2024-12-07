@@ -1,8 +1,8 @@
 import { streamDeck } from "@elgato/streamdeck";
-import { LocalWeatherSettings, Memo } from '../types'
+import { WeatherSettings, Memo } from '../types'
 
 /**
- * A closure around a value, in this case a LocalWeatherSettings instance.
+ * A closure around a value, in this case a WeatherSettings instance.
  * Allows for recurring access to the value within the scope of an action.
  * @returns Object with .get() and .set()
  */
@@ -15,10 +15,10 @@ function createSettingsMemo(): Memo {
   };
 
   return {
-    get: function (): LocalWeatherSettings {
+    get: function (): WeatherSettings {
       return settings;
     },
-    set: function (newSettings: LocalWeatherSettings) {
+    set: function (newSettings: WeatherSettings) {
       settings = newSettings;
     },
     isEmpty: function (): Boolean {
@@ -34,7 +34,7 @@ function createSettingsMemo(): Memo {
  * Rules for whether to memoize a value.
  * @returns Boolean value on whether memoization occurred.
  */
-function memoizeSettings(memo: Memo, newSettings: LocalWeatherSettings): Boolean {
+function memoizeSettings(memo: Memo, newSettings: WeatherSettings): Boolean {
   streamDeck.logger.info(`Memoizing settings: ${newSettings.refreshTime || 0}min`);
 	const currentSettings = memo.get();
 	const hasNewValue = currentSettings.refreshTime !== newSettings.refreshTime

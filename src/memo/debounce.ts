@@ -1,5 +1,5 @@
 import { streamDeck } from "@elgato/streamdeck";
-import { LocalWeatherSettings, Memo } from '../types'
+import { Memo } from '../types'
 
 const DEBOUNCE_MS = 1000;
 

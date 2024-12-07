@@ -16,12 +16,12 @@ import {
 import {
 	createSettingsMemo,
 	memoizeSettings,
-} from '../memo/local-weather-settings'
-import { openweatherData } from '../client/open-weather'
-import { LocalWeatherSettings, LocalWeatherActionSettings, WeatherData } from '../types'
+} from '../memo/weather-settings'
+import { openweatherData } from '../client/openweather'
+import { WeatherSettings, WeatherActionSettings, WeatherData } from '../types'
 import { createWeatherDataMemo, memoizeWeatherData } from "../memo/weather-data";
 
-const UUID = "com.luke-abel.local-weather.display-weather";
+const UUID = "com.luke-abel.deckweather.weather";
 
 // These values clamp the refresh interval, to prevent excess API requests.
 const REFRESH_MIN_SEC = 3;
@@ -44,14 +44,14 @@ const weatherDataMemo = createWeatherDataMemo();
  * An action class that displays current weather information when the current button is pressed.
  */
 @action({ UUID })
-export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
+export class Weather extends SingletonAction<WeatherSettings> {
 	/**
 	 * The {@link SingletonAction.onWillAppear} event is useful for setting the
 	 * visual representation of an action when it becomes visible.
 	 * This could be due to the Stream Deck first starting up, or the user navigating between pages / folders etc.
 	 */
-	override async onWillAppear(ev: WillAppearEvent<LocalWeatherSettings>): Promise<void> {
-		const settings = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+	override async onWillAppear(ev: WillAppearEvent<WeatherSettings>): Promise<void> {
+		const settings = await streamDeck.settings.getGlobalSettings() as WeatherSettings;	
 		memoizeSettings(settingsMemo, settings);
 		return beginInterval(ev.action, settingsMemo.get().refreshTime);
 	}
@@ -60,8 +60,8 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 	 * Listens for the {@link SingletonAction.onKeyDown} event,
 	 * which is emitted by Stream Deck when an action is pressed.
 	 */
-	override async onKeyDown(ev: KeyDownEvent<LocalWeatherSettings>): Promise<void> {
-		const settings = await streamDeck.settings.getGlobalSettings() as LocalWeatherSettings;	
+	override async onKeyDown(ev: KeyDownEvent<WeatherSettings>): Promise<void> {
+		const settings = await streamDeck.settings.getGlobalSettings() as WeatherSettings;	
 		memoizeSettings(settingsMemo, settings);
 		return beginInterval(ev.action, settingsMemo.get().refreshTime);
 	}
@@ -70,7 +70,7 @@ export class DisplayWeather extends SingletonAction<LocalWeatherSettings> {
 /**
  * This hook provides "hot reloading" of the plugin when settings are changed.
  */
-streamDeck.settings.onDidReceiveGlobalSettings((ev: DidReceiveGlobalSettingsEvent<LocalWeatherSettings>) => {
+streamDeck.settings.onDidReceiveGlobalSettings((ev: DidReceiveGlobalSettingsEvent<WeatherSettings>) => {
 	streamDeck.logger.info(`Detected global settings event (refreshTime: ${ev.settings.refreshTime || 0}min)`);
 	const settingsDidChange = memoizeSettings(settingsMemo, ev.settings);
 	if (settingsDidChange) {
@@ -111,7 +111,7 @@ async function beginInterval(action: DialAction|KeyAction, refreshTime: number) 
  * @returns 
  */
 async function endInterval(action: DialAction|KeyAction) {
-	let { intervalId } = await action.getSettings() as LocalWeatherActionSettings;
+	let { intervalId } = await action.getSettings() as WeatherActionSettings;
 	if (intervalId) {
 		streamDeck.logger.info(`Clearing interval ${intervalId}`);
 		clearInterval(intervalId);
@@ -160,7 +160,7 @@ async function fetchWeather(): Promise<WeatherData> {
 	// Currently OpenWeather allows for 1000 requests/day for free. At max refresh of 3min,
 	// that is 480 possible requests/day. Shouldn't be an issue for most users.
 	if (memoizeDebounce(debounceMemo, Date.now()) || weatherDataMemo.isEmpty()) {
-		const { openweatherApiKey, latLong } = settingsMemo.get() as LocalWeatherSettings;
+		const { openweatherApiKey, latLong } = settingsMemo.get() as WeatherSettings;
 		const weatherData = await openweatherData(openweatherApiKey, latLong);
 		memoizeWeatherData(weatherDataMemo, weatherData);
 		return weatherData;

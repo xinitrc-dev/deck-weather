@@ -1,19 +1,19 @@
 #!/bin/bash
 
-log_dir="com.luke-abel.local-weather.sdPlugin/logs"
+log_dir="com.luke-abel.deckweather.sdPlugin/logs"
 
 # Define the array of log file names
 log_files=(
-  "$log_dir/com.luke-abel.local-weather.0.log"
-  "$log_dir/com.luke-abel.local-weather.1.log"
-  "$log_dir/com.luke-abel.local-weather.2.log"
-  "$log_dir/com.luke-abel.local-weather.3.log"
-  "$log_dir/com.luke-abel.local-weather.4.log"
-  "$log_dir/com.luke-abel.local-weather.5.log"
-  "$log_dir/com.luke-abel.local-weather.6.log"
-  "$log_dir/com.luke-abel.local-weather.7.log"
-  "$log_dir/com.luke-abel.local-weather.8.log"
-  "$log_dir/com.luke-abel.local-weather.9.log"
+  "$log_dir/com.luke-abel.deckweather.0.log"
+  "$log_dir/com.luke-abel.deckweather.1.log"
+  "$log_dir/com.luke-abel.deckweather.2.log"
+  "$log_dir/com.luke-abel.deckweather.3.log"
+  "$log_dir/com.luke-abel.deckweather.4.log"
+  "$log_dir/com.luke-abel.deckweather.5.log"
+  "$log_dir/com.luke-abel.deckweather.6.log"
+  "$log_dir/com.luke-abel.deckweather.7.log"
+  "$log_dir/com.luke-abel.deckweather.8.log"
+  "$log_dir/com.luke-abel.deckweather.9.log"
 )
 
 # Initialize variables to store the latest log file name and timestamp

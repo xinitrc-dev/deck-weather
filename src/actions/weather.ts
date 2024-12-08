@@ -136,10 +136,25 @@ function getRefreshTimeMs(refreshTime: number): number {
  */
 async function setKeyInfo(action: DialAction|KeyAction, fromInterval: boolean): Promise<void> {
 	streamDeck.logger.info(`Setting keyInfo ${fromInterval ? 'from interval' : 'not from interval'}`);
+
+	const { openweatherApiKey, latLong } = settingsMemo.get() as WeatherSettings;
+
+	if (!openweatherApiKey) {
+		action.setImage(`imgs/actions/weather/unknown`);
+		return action.setTitle(generateErrorTitle("API Key?"));
+	}
+
+	if (!latLong) {
+		action.setImage(`imgs/actions/weather/unknown`);
+		return action.setTitle(generateErrorTitle("Lat/Long?"));
+	}
+
 	const { temperature, humidity, windspeed, icon } = await fetchWeather();
+
 	if (VALID_ICONS.includes(icon)) {
-		// TODO: add unknown icon
-		action.setImage(`imgs/actions/display-weather/${icon}`);
+		action.setImage(`imgs/actions/weather/${icon}`);
+	} else {
+		action.setImage(`imgs/actions/weather/unknown`);
 	}
 	return action.setTitle(generateTitle(temperature, humidity, windspeed));
 }
@@ -153,7 +168,7 @@ async function fetchWeather(): Promise<WeatherData> {
 	const now = Date.now();
 
 	// If a new debounce time can be memoized, the debounce period has elapsed
-	// and we can fetch/memoize new data.
+	// and we can fetch+memoize new data.
 	// If weatherData is empty, also make sure to fetch it.
 	//
 	// Bypassing debounce can lead to multiple requests (~3) when init-ing the plugin.
@@ -177,6 +192,10 @@ function generateTitle(temp: number, humidity: number, windspeed: number): strin
 	const roundedTemp = Math.round((temp || 0) * 10) / 10
 	const roundedWind = Math.round((windspeed || 0) * 10) / 10
 	return `${roundedTemp}°, ${humidity}%\n\n\n\n${roundedWind} mph`
+}
+
+function generateErrorTitle(message: string): string {
+	return `\n\n\n\n${message}`
 }
 
 function clamp(value: number, min: number, max: number) {

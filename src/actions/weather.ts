@@ -149,14 +149,18 @@ async function setKeyInfo(action: DialAction|KeyAction, fromInterval: boolean): 
 		return action.setTitle(generateErrorTitle("Lat/Long?"));
 	}
 
-	const { temperature, humidity, windspeed, icon } = await fetchWeather();
-
-	if (VALID_ICONS.includes(icon)) {
-		action.setImage(`imgs/actions/weather/${icon}`);
-	} else {
+	try {
+		const { temperature, humidity, windspeed, icon } = await fetchWeather();
+		if (VALID_ICONS.includes(icon)) {
+			action.setImage(`imgs/actions/weather/${icon}`);
+		} else {
+			action.setImage(`imgs/actions/weather/unknown`);
+		}
+		return action.setTitle(generateTitle(temperature, humidity, windspeed));
+	} catch(e) {
 		action.setImage(`imgs/actions/weather/unknown`);
+		return action.setTitle(generateErrorTitle("Error!"));
 	}
-	return action.setTitle(generateTitle(temperature, humidity, windspeed));
 }
 
 /**

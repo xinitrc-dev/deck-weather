@@ -140,11 +140,13 @@ async function setKeyInfo(action: DialAction|KeyAction, fromInterval: boolean): 
 	const { openweatherApiKey, latLong } = settingsMemo.get() as WeatherSettings;
 
 	if (!openweatherApiKey) {
+		action.showAlert();
 		action.setImage(`imgs/actions/weather/unknown`);
 		return action.setTitle(generateErrorTitle("API Key?"));
 	}
 
 	if (!latLong) {
+		action.showAlert();
 		action.setImage(`imgs/actions/weather/unknown`);
 		return action.setTitle(generateErrorTitle("Lat/Long?"));
 	}
@@ -158,6 +160,7 @@ async function setKeyInfo(action: DialAction|KeyAction, fromInterval: boolean): 
 		}
 		return action.setTitle(generateTitle(temperature, humidity, windspeed));
 	} catch(e) {
+		action.showAlert();
 		action.setImage(`imgs/actions/weather/unknown`);
 		return action.setTitle(generateErrorTitle("Error!"));
 	}

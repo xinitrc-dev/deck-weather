@@ -1,7 +1,7 @@
 {
     "scripts": {
         "build": "rollup -c",
-        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.luke-abel.deckweather\""
+        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.luke-abel.deck-weather\""
     },
     "type": "module",
     "devDependencies": {

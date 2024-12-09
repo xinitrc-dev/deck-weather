@@ -6,7 +6,7 @@ import path from "node:path";
 import url from "node:url";
 
 const isWatching = !!process.env.ROLLUP_WATCH;
-const sdPlugin = "com.luke-abel.deckweather.sdPlugin";
+const sdPlugin = "com.luke-abel.deck-weather.sdPlugin";
 
 /**
  * @type {import('rollup').RollupOptions}

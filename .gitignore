@@ -1,10 +1,32 @@
 # Node.js
 node_modules/
+package-lock.json
+npm-debug.log*
+yarn.lock
 
+# macOS
 .DS_Store
 
-# Stream Deck files
-*.sdPlugin/bin
-*.sdPlugin/logs
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
+# Stream Deck plugin build and log files
+*.sdPlugin/bin/
+*.sdPlugin/logs/
+*.streamDeckPlugin
+
+# Build output
+bin/
+dist/
+*.log
+
+# VSCode
+.vscode/
+
+# Misc
 scratch/
+*.env
+*.local
+coverage/

@@ -1,6 +1,6 @@
 {
 	"Name": "Deck Weather",
-	"Version": "0.1.0.0",
+	"Version": "0.1.1.0",
 	"Author": "Luke Abel",
 	"Actions": [
 		{
@@ -9,6 +9,22 @@
 			"Icon": "imgs/actions/weather/icon",
 			"Tooltip": "Displays current temperature for a given location.",
 			"PropertyInspectorPath": "ui/deck-weather.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/weather/01d",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Weather Toggle",
+			"UUID": "com.luke-abel.deck-weather.weathertoggle",
+			"Icon": "imgs/actions/weather/icon",
+			"Tooltip": "Displays current temperature for a given location. Allowing you to toggle between Celsius and Fahrenheit.",
+			"PropertyInspectorPath": "ui/deck-weathertoggle.html",
 			"Controllers": [
 				"Keypad"
 			],
